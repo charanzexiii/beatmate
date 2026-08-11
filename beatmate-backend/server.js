@@ -1,3 +1,4 @@
+```js
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
@@ -35,12 +36,14 @@ const IS_WINDOWS =
     process.platform === "win32";
 
 /*
- * Windows:
- *   Use files from /bin
- *
- * Render/Linux:
- *   Use yt-dlp and ffmpeg installed in PATH
- */
+    Windows:
+    - yt-dlp.exe from /bin
+    - ffmpeg.exe from /bin
+
+    Linux / Render:
+    - yt-dlp from PATH
+    - ffmpeg from /bin/ffmpeg
+*/
 
 const YTDLP = IS_WINDOWS
     ? path.join(
@@ -51,22 +54,28 @@ const YTDLP = IS_WINDOWS
     : "yt-dlp";
 
 const FFMPEG = IS_WINDOWS
-    ? path.join(ROOT, "bin", "ffmpeg.exe")
-    : path.join(ROOT, "bin", "ffmpeg");
+    ? path.join(
+        ROOT,
+        "bin",
+        "ffmpeg.exe"
+    )
+    : path.join(
+        ROOT,
+        "bin",
+        "ffmpeg"
+    );
 
 /* =====================================================
    CREATE DOWNLOAD FOLDER
 ===================================================== */
 
 if (!fs.existsSync(DOWNLOAD_DIR)) {
-
     fs.mkdirSync(
         DOWNLOAD_DIR,
         {
             recursive: true
         }
     );
-
 }
 
 /* =====================================================
@@ -96,7 +105,6 @@ app.use(
         }
 
         next();
-
     }
 );
 
@@ -130,7 +138,6 @@ app.use(
         );
 
         next();
-
     }
 );
 
@@ -152,7 +159,8 @@ function isYouTubeUrl(value) {
 
     try {
 
-        const url = new URL(value);
+        const url =
+            new URL(value);
 
         const host =
             url.hostname.toLowerCase();
@@ -172,7 +180,6 @@ function isYouTubeUrl(value) {
         return false;
 
     }
-
 }
 
 /* =====================================================
@@ -204,6 +211,7 @@ function checkExecutable(command) {
                     if (!finished) {
 
                         finished = true;
+
                         resolve(false);
 
                     }
@@ -230,7 +238,6 @@ function checkExecutable(command) {
 
         }
     );
-
 }
 
 /* =====================================================
@@ -243,9 +250,9 @@ function runYtDlp(args) {
         (resolve, reject) => {
 
             /*
-             * On Windows check that the file exists.
+             * On Windows check the local executable.
              *
-             * On Linux/Render, yt-dlp is expected
+             * On Linux/Render yt-dlp is expected
              * to be available in PATH.
              */
 
@@ -337,7 +344,6 @@ function runYtDlp(args) {
 
         }
     );
-
 }
 
 /* =====================================================
@@ -1170,7 +1176,6 @@ function updateProgress(
             "Finalizing...";
 
     }
-
 }
 
 /* =====================================================
@@ -1490,3 +1495,4 @@ app.listen(
 
     }
 );
+```
