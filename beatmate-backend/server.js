@@ -76,7 +76,7 @@ try {
 }
 
 /* =====================================================
-   EXPRESS CONFIGURATION
+   EXPRESS CONFIGURATIONs
 ===================================================== */
 
 app.disable("x-powered-by");
