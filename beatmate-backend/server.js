@@ -5,7 +5,11 @@ const { spawn } = require("child_process");
 
 const app = express();
 
-const PORT = 3000;
+/* =====================================================
+   SERVER PORT
+===================================================== */
+
+const PORT = process.env.PORT || 3000;
 
 /* =====================================================
    PATHS
@@ -23,18 +27,36 @@ const DOWNLOAD_DIR = path.join(
     "downloads"
 );
 
-const YTDLP = path.join(
-    ROOT,
-    "bin",
-    "yt-dlp.exe"
-);
+/* =====================================================
+   PLATFORM / DOWNLOADER
+===================================================== */
 
-const FFMPEG = path.join(
-    ROOT,
-    "bin",
-    "ffmpeg.exe"
-);
+const IS_WINDOWS =
+    process.platform === "win32";
 
+/*
+ * Windows:
+ *   Use files from /bin
+ *
+ * Render/Linux:
+ *   Use yt-dlp and ffmpeg installed in PATH
+ */
+
+const YTDLP = IS_WINDOWS
+    ? path.join(
+        ROOT,
+        "bin",
+        "yt-dlp.exe"
+    )
+    : "yt-dlp";
+
+const FFMPEG = IS_WINDOWS
+    ? path.join(
+        ROOT,
+        "bin",
+        "ffmpeg.exe"
+    )
+    : "ffmpeg";
 
 /* =====================================================
    CREATE DOWNLOAD FOLDER
@@ -50,7 +72,6 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
     );
 
 }
-
 
 /* =====================================================
    CORS
@@ -83,7 +104,6 @@ app.use(
     }
 );
 
-
 /* =====================================================
    EXPRESS
 ===================================================== */
@@ -99,7 +119,6 @@ app.use(
         extended: true
     })
 );
-
 
 /* =====================================================
    REQUEST LOGGER
@@ -119,7 +138,6 @@ app.use(
     }
 );
 
-
 /* =====================================================
    FRONTEND
 ===================================================== */
@@ -129,7 +147,6 @@ app.use(
         PUBLIC_DIR
     )
 );
-
 
 /* =====================================================
    YOUTUBE URL CHECK
@@ -162,6 +179,63 @@ function isYouTubeUrl(value) {
 
 }
 
+/* =====================================================
+   CHECK EXECUTABLE
+===================================================== */
+
+function checkExecutable(command) {
+
+    return new Promise(
+        (resolve) => {
+
+            const child =
+                spawn(
+                    command,
+                    ["--version"],
+                    IS_WINDOWS
+                        ? {
+                            windowsHide: true
+                        }
+                        : {}
+                );
+
+            let finished = false;
+
+            child.on(
+                "error",
+                () => {
+
+                    if (!finished) {
+
+                        finished = true;
+                        resolve(false);
+
+                    }
+
+                }
+            );
+
+            child.on(
+                "close",
+                code => {
+
+                    if (!finished) {
+
+                        finished = true;
+
+                        resolve(
+                            code === 0
+                        );
+
+                    }
+
+                }
+            );
+
+        }
+    );
+
+}
 
 /* =====================================================
    RUN YT-DLP
@@ -172,32 +246,43 @@ function runYtDlp(args) {
     return new Promise(
         (resolve, reject) => {
 
-            if (!fs.existsSync(YTDLP)) {
+            /*
+             * On Windows check that the file exists.
+             *
+             * On Linux/Render, yt-dlp is expected
+             * to be available in PATH.
+             */
 
-                reject(
-                    new Error(
-                        "yt-dlp.exe not found."
-                    )
-                );
+            if (IS_WINDOWS) {
 
-                return;
+                if (!fs.existsSync(YTDLP)) {
+
+                    reject(
+                        new Error(
+                            "yt-dlp.exe not found in bin folder."
+                        )
+                    );
+
+                    return;
+
+                }
+
             }
-
 
             const child =
                 spawn(
                     YTDLP,
                     args,
-                    {
-                        windowsHide: true
-                    }
+                    IS_WINDOWS
+                        ? {
+                            windowsHide: true
+                        }
+                        : {}
                 );
-
 
             let stdout = "";
 
             let stderr = "";
-
 
             child.stdout.on(
                 "data",
@@ -209,7 +294,6 @@ function runYtDlp(args) {
                 }
             );
 
-
             child.stderr.on(
                 "data",
                 data => {
@@ -220,7 +304,6 @@ function runYtDlp(args) {
                 }
             );
 
-
             child.on(
                 "error",
                 error => {
@@ -229,7 +312,6 @@ function runYtDlp(args) {
 
                 }
             );
-
 
             child.on(
                 "close",
@@ -262,7 +344,6 @@ function runYtDlp(args) {
 
 }
 
-
 /* =====================================================
    TEST API
 ===================================================== */
@@ -276,13 +357,18 @@ app.get(
             success: true,
 
             message:
-                "BEATMATE API is working"
+                "BEATMATE API is working",
+
+            platform:
+                process.platform,
+
+            port:
+                PORT
 
         });
 
     }
 );
-
 
 /* =====================================================
    HEALTH API
@@ -294,20 +380,18 @@ app.get(
 
         try {
 
-            /*
-             * Backend is alive even if
-             * yt-dlp or ffmpeg is missing.
-             */
-
             const ytDlpExists =
-                fs.existsSync(YTDLP);
+                await checkExecutable(
+                    YTDLP
+                );
 
             const ffmpegExists =
-                fs.existsSync(FFMPEG);
+                await checkExecutable(
+                    FFMPEG
+                );
 
-
-            let version = "Unavailable";
-
+            let version =
+                "Unavailable";
 
             if (ytDlpExists) {
 
@@ -332,14 +416,17 @@ app.get(
 
             }
 
-
             return res.json({
 
                 success: true,
 
                 server: true,
 
-                version: version,
+                platform:
+                    process.platform,
+
+                version:
+                    version,
 
                 ytDlp:
                     ytDlpExists,
@@ -369,7 +456,6 @@ app.get(
     }
 );
 
-
 /* =====================================================
    VIDEO INFO
 ===================================================== */
@@ -386,12 +472,10 @@ app.post(
                     ""
                 ).trim();
 
-
             console.log(
                 "Getting video:",
                 url
             );
-
 
             if (!isYouTubeUrl(url)) {
 
@@ -408,7 +492,6 @@ app.post(
 
             }
 
-
             const output =
                 await runYtDlp([
 
@@ -424,7 +507,6 @@ app.post(
 
                 ]);
 
-
             if (!output.trim()) {
 
                 throw new Error(
@@ -433,10 +515,8 @@ app.post(
 
             }
 
-
             const info =
                 JSON.parse(output);
-
 
             return res.json({
 
@@ -473,7 +553,6 @@ app.post(
                 error.message
             );
 
-
             return res
                 .status(500)
                 .json({
@@ -490,13 +569,11 @@ app.post(
     }
 );
 
-
 /* =====================================================
    DOWNLOAD JOBS
 ===================================================== */
 
 const jobs = {};
-
 
 /* =====================================================
    START DOWNLOAD
@@ -514,16 +591,13 @@ app.post(
                     ""
                 ).trim();
 
-
             const type =
                 req.body.type ||
                 "video";
 
-
             const quality =
                 req.body.quality ||
                 "best";
-
 
             console.log(
                 "DOWNLOAD REQUEST"
@@ -544,7 +618,6 @@ app.post(
                 quality
             );
 
-
             /* =========================================
                VALIDATION
             ========================================= */
@@ -564,7 +637,6 @@ app.post(
 
             }
 
-
             if (
                 type !== "video" &&
                 type !== "audio"
@@ -583,24 +655,16 @@ app.post(
 
             }
 
+            /* =========================================
+               CHECK YT-DLP
+            ========================================= */
 
-            if (!fs.existsSync(YTDLP)) {
+            const ytDlpAvailable =
+                await checkExecutable(
+                    YTDLP
+                );
 
-                return res
-                    .status(500)
-                    .json({
-
-                        success: false,
-
-                        error:
-                            "yt-dlp.exe not found."
-
-                    });
-
-            }
-
-
-            if (!fs.existsSync(FFMPEG)) {
+            if (!ytDlpAvailable) {
 
                 return res
                     .status(500)
@@ -609,12 +673,35 @@ app.post(
                         success: false,
 
                         error:
-                            "ffmpeg.exe not found."
+                            "yt-dlp is not installed or cannot be executed."
 
                     });
 
             }
 
+            /* =========================================
+               CHECK FFMPEG
+            ========================================= */
+
+            const ffmpegAvailable =
+                await checkExecutable(
+                    FFMPEG
+                );
+
+            if (!ffmpegAvailable) {
+
+                return res
+                    .status(500)
+                    .json({
+
+                        success: false,
+
+                        error:
+                            "FFmpeg is not installed or cannot be executed."
+
+                    });
+
+            }
 
             /* =========================================
                JOB ID
@@ -627,7 +714,6 @@ app.post(
                     .toString(36)
                     .substring(2, 10);
 
-
             /* =========================================
                OUTPUT
             ========================================= */
@@ -638,13 +724,11 @@ app.post(
                     `${jobId}-%(title)s.%(ext)s`
                 );
 
-
             /* =========================================
                FORMAT
             ========================================= */
 
             let format;
-
 
             if (type === "audio") {
 
@@ -664,14 +748,12 @@ app.post(
 
                         break;
 
-
                     case "720":
 
                         format =
                             "bestvideo[height<=720]+bestaudio/best";
 
                         break;
-
 
                     case "480":
 
@@ -680,14 +762,12 @@ app.post(
 
                         break;
 
-
                     case "360":
 
                         format =
                             "bestvideo[height<=360]+bestaudio/best";
 
                         break;
-
 
                     default:
 
@@ -699,7 +779,6 @@ app.post(
                 }
 
             }
-
 
             /* =========================================
                YT-DLP ARGUMENTS
@@ -724,7 +803,6 @@ app.post(
 
             ];
 
-
             /* =========================================
                AUDIO
             ========================================= */
@@ -745,7 +823,6 @@ app.post(
 
             }
 
-
             /* =========================================
                VIDEO
             ========================================= */
@@ -761,13 +838,11 @@ app.post(
 
             }
 
-
             /* =========================================
                URL LAST
             ========================================= */
 
             args.push(url);
-
 
             /* =========================================
                CREATE JOB
@@ -790,12 +865,10 @@ app.post(
 
             };
 
-
             console.log(
                 "JOB:",
                 jobId
             );
-
 
             /* =========================================
                START YT-DLP
@@ -805,11 +878,12 @@ app.post(
                 spawn(
                     YTDLP,
                     args,
-                    {
-                        windowsHide: true
-                    }
+                    IS_WINDOWS
+                        ? {
+                            windowsHide: true
+                        }
+                        : {}
                 );
-
 
             child.stdout.on(
                 "data",
@@ -823,7 +897,6 @@ app.post(
                 }
             );
 
-
             child.stderr.on(
                 "data",
                 data => {
@@ -836,7 +909,6 @@ app.post(
                 }
             );
 
-
             child.on(
                 "error",
                 error => {
@@ -845,7 +917,6 @@ app.post(
                         "PROCESS ERROR:",
                         error.message
                     );
-
 
                     if (jobs[jobId]) {
 
@@ -863,7 +934,6 @@ app.post(
                 }
             );
 
-
             child.on(
                 "close",
                 code => {
@@ -873,11 +943,9 @@ app.post(
                         code
                     );
 
-
                     if (!jobs[jobId]) {
                         return;
                     }
-
 
                     if (code !== 0) {
 
@@ -894,16 +962,35 @@ app.post(
 
                     }
 
-
                     /* =================================
                        FIND FILE
                     ================================= */
 
-                    const files =
-                        fs.readdirSync(
-                            DOWNLOAD_DIR
-                        );
+                    let files = [];
 
+                    try {
+
+                        files =
+                            fs.readdirSync(
+                                DOWNLOAD_DIR
+                            );
+
+                    }
+
+                    catch (error) {
+
+                        jobs[jobId].error =
+                            error.message;
+
+                        jobs[jobId].status =
+                            "Failed";
+
+                        jobs[jobId].finished =
+                            true;
+
+                        return;
+
+                    }
 
                     const fileName =
                         files.find(
@@ -912,7 +999,6 @@ app.post(
                                     jobId + "-"
                                 )
                         );
-
 
                     if (!fileName) {
 
@@ -929,7 +1015,6 @@ app.post(
 
                     }
 
-
                     jobs[jobId].progress =
                         100;
 
@@ -942,7 +1027,6 @@ app.post(
                     jobs[jobId].finished =
                         true;
 
-
                     console.log(
                         "DOWNLOAD COMPLETE:",
                         fileName
@@ -950,7 +1034,6 @@ app.post(
 
                 }
             );
-
 
             /* =========================================
                SEND JOB ID
@@ -974,7 +1057,6 @@ app.post(
                 error.message
             );
 
-
             return res
                 .status(500)
                 .json({
@@ -991,7 +1073,6 @@ app.post(
     }
 );
 
-
 /* =====================================================
    UPDATE PROGRESS
 ===================================================== */
@@ -1004,15 +1085,12 @@ function updateProgress(
     const job =
         jobs[jobId];
 
-
     if (!job) {
         return;
     }
 
-
     const clean =
         text.trim();
-
 
     if (clean) {
 
@@ -1023,7 +1101,6 @@ function updateProgress(
 
     }
 
-
     /* =========================================
        PERCENTAGE
     ========================================= */
@@ -1033,14 +1110,12 @@ function updateProgress(
             /(\d+(?:\.\d+)?)%/
         );
 
-
     if (percentMatch) {
 
         const percent =
             parseFloat(
                 percentMatch[1]
             );
-
 
         job.progress =
             Math.min(
@@ -1051,12 +1126,10 @@ function updateProgress(
                 )
             );
 
-
         job.status =
             "Downloading...";
 
     }
-
 
     /* =========================================
        SPEED
@@ -1067,14 +1140,12 @@ function updateProgress(
             /\bat\s+([^\s]+)/i
         );
 
-
     if (speedMatch) {
 
         job.speed =
             speedMatch[1];
 
     }
-
 
     /* =========================================
        MERGING
@@ -1090,6 +1161,9 @@ function updateProgress(
 
     }
 
+    /* =========================================
+       FINALIZING
+    ========================================= */
 
     if (
         text.toLowerCase()
@@ -1103,7 +1177,6 @@ function updateProgress(
 
 }
 
-
 /* =====================================================
    DOWNLOAD STATUS
 ===================================================== */
@@ -1116,7 +1189,6 @@ app.get(
             jobs[
                 req.params.jobId
             ];
-
 
         if (!job) {
 
@@ -1132,7 +1204,6 @@ app.get(
                 });
 
         }
-
 
         return res.json({
 
@@ -1158,7 +1229,6 @@ app.get(
     }
 );
 
-
 /* =====================================================
    SEND FILE
 ===================================================== */
@@ -1172,7 +1242,6 @@ app.get(
                 req.params.jobId
             ];
 
-
         if (!job) {
 
             return res
@@ -1182,7 +1251,6 @@ app.get(
                 );
 
         }
-
 
         if (!job.finished) {
 
@@ -1194,7 +1262,6 @@ app.get(
 
         }
 
-
         if (job.error) {
 
             return res
@@ -1204,7 +1271,6 @@ app.get(
                 );
 
         }
-
 
         if (!job.file) {
 
@@ -1216,13 +1282,11 @@ app.get(
 
         }
 
-
         const filePath =
             path.join(
                 DOWNLOAD_DIR,
                 job.file
             );
-
 
         if (!fs.existsSync(filePath)) {
 
@@ -1234,12 +1298,10 @@ app.get(
 
         }
 
-
         console.log(
             "SENDING:",
             job.file
         );
-
 
         res.download(
             filePath,
@@ -1255,14 +1317,12 @@ app.get(
 
                 }
 
-
                 /* Delete downloaded file */
 
                 fs.unlink(
                     filePath,
                     () => {}
                 );
-
 
                 /* Delete job */
 
@@ -1275,7 +1335,6 @@ app.get(
 
     }
 );
-
 
 /* =====================================================
    HOME PAGE
@@ -1291,7 +1350,6 @@ app.get(
                 "index.html"
             );
 
-
         if (!fs.existsSync(indexPath)) {
 
             return res
@@ -1302,12 +1360,10 @@ app.get(
 
         }
 
-
         res.sendFile(indexPath);
 
     }
 );
-
 
 /* =====================================================
    UNKNOWN API
@@ -1321,7 +1377,6 @@ app.use(
             req.method,
             req.url
         );
-
 
         if (
             req.url.startsWith("/api/")
@@ -1345,7 +1400,6 @@ app.use(
 
         }
 
-
         return res
             .status(404)
             .send(
@@ -1355,13 +1409,13 @@ app.use(
     }
 );
 
-
 /* =====================================================
    START SERVER
 ===================================================== */
 
 app.listen(
     PORT,
+    "0.0.0.0",
     () => {
 
         console.log("");
@@ -1376,6 +1430,18 @@ app.listen(
 
         console.log(
             "======================================"
+        );
+
+        console.log("");
+
+        console.log(
+            "Platform:",
+            process.platform
+        );
+
+        console.log(
+            "Port:",
+            PORT
         );
 
         console.log("");
@@ -1412,16 +1478,16 @@ app.listen(
 
         console.log(
             "yt-dlp:",
-            fs.existsSync(YTDLP)
-                ? "OK"
-                : "NOT FOUND"
+            IS_WINDOWS
+                ? YTDLP
+                : "PATH: yt-dlp"
         );
 
         console.log(
             "FFmpeg:",
-            fs.existsSync(FFMPEG)
-                ? "OK"
-                : "NOT FOUND"
+            IS_WINDOWS
+                ? FFMPEG
+                : "PATH: ffmpeg"
         );
 
         console.log("");
