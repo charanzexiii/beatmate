@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BEATMATE</title>
+    <link rel="shortcut icon" type="image/jpeg" href="beatmate.jpeg">
+<style>
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+
+body {
+
+    min-height: 100vh;
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+
+    color: white;
+
+    background:
+        linear-gradient(
+            135deg,
+            #070b18,
+            #11172a
+        );
+}
+
+
+/* ==============================
+   HEADER
+============================== */
+
+header {
+
+    width: 90%;
+
+    max-width: 1100px;
+
+    margin: auto;
+
+    padding: 25px 0;
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+}
+
+
+.logo {
+
+    font-size: 30px;
+
+    font-weight: bold;
+
+    letter-spacing: 1px;
+}
+
+
+.logo span {
+
+    color: #7c5cff;
+}
+
+
+.status {
+
+    font-size: 13px;
+
+    color: #aaa;
+}
+
+
+/* ==============================
+   MAIN
+============================== */
+
+main {
+
+    width: 90%;
+
+    max-width: 900px;
+
+    margin: 70px auto;
+
+    text-align: center;
+}
+
+
+/* ==============================
+   BADGE
+============================== */
+
+.badge {
+
+    display: inline-block;
+
+    padding: 8px 15px;
+
+    border-radius: 50px;
+
+    background:
+        rgba(124,92,255,.15);
+
+    color: #bdb0ff;
+
+    font-size: 12px;
+
+    margin-bottom: 20px;
+}
+
+
+/* ==============================
+   HEADING
+============================== */
+
+h1 {
+
+    font-size:
+        clamp(42px, 8vw, 70px);
+
+    line-height: 1;
+
+    margin-bottom: 20px;
+}
+
+
+.gradient {
+
+    background:
+        linear-gradient(
+            90deg,
+            #7c5cff,
+            #25c8ff
+        );
+
+    -webkit-background-clip: text;
+
+    background-clip: text;
+
+    color: transparent;
+}
+
+
+/* ==============================
+   SUBTITLE
+============================== */
+
+.subtitle {
+
+    color: #9da6bb;
+
+    max-width: 650px;
+
+    margin:
+        0 auto 35px;
+
+    line-height: 1.7;
+}
+
+
+/* ==============================
+   CARD
+============================== */
+
+.card {
+
+    padding: 25px;
+
+    background:
+        rgba(255,255,255,.05);
+
+    border:
+        1px solid
+        rgba(255,255,255,.1);
+
+    border-radius: 20px;
+
+    box-shadow:
+        0 30px 80px
+        rgba(0,0,0,.3);
+}
+
+
+/* ==============================
+   URL
+============================== */
+
+.url-row {
+
+    display: grid;
+
+    grid-template-columns:
+        1fr auto;
+
+    gap: 10px;
+}
+
+
+input,
+select {
+
+    width: 100%;
+
+    padding: 15px;
+
+    border:
+        1px solid
+        rgba(255,255,255,.1);
+
+    border-radius: 12px;
+
+    background: #080d1a;
+
+    color: white;
+
+    outline: none;
+}
+
+
+input:focus,
+select:focus {
+
+    border-color: #7c5cff;
+}
+
+
+/* ==============================
+   BUTTON
+============================== */
+
+button {
+
+    border: none;
+
+    padding: 15px 22px;
+
+    border-radius: 12px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #7c5cff,
+            #4e83ff
+        );
+
+    color: white;
+
+    font-weight: bold;
+
+    cursor: pointer;
+}
+
+
+button:hover {
+
+    opacity: .9;
+}
+
+
+button:disabled {
+
+    opacity: .5;
+
+    cursor: not-allowed;
+}
+
+
+/* ==============================
+   OPTIONS
+============================== */
+
+.options {
+
+    display: grid;
+
+    grid-template-columns:
+        1fr 1fr auto;
+
+    gap: 10px;
+
+    margin-top: 10px;
+}
+
+
+/* ==============================
+   VIDEO
+============================== */
+
+.video {
+
+    display: none;
+
+    margin-top: 20px;
+
+    padding-top: 20px;
+
+    border-top:
+        1px solid
+        rgba(255,255,255,.1);
+
+    text-align: left;
+
+    grid-template-columns:
+        220px 1fr;
+
+    gap: 20px;
+}
+
+
+.video.show {
+
+    display: grid;
+}
+
+
+.video img {
+
+    width: 100%;
+
+    border-radius: 12px;
+}
+
+
+.video h2 {
+
+    margin-bottom: 10px;
+
+    font-size: 20px;
+}
+
+
+.video p {
+
+    color: #9da6bb;
+
+    line-height: 1.5;
+}
+
+
+/* ==============================
+   ERROR
+============================== */
+
+.error {
+
+    display: none;
+
+    margin-top: 15px;
+
+    padding: 12px;
+
+    border-radius: 10px;
+
+    color: #ff9caf;
+
+    background:
+        rgba(255,70,100,.1);
+
+    white-space: pre-wrap;
+
+    text-align: left;
+}
+
+
+.error.show {
+
+    display: block;
+}
+
+
+/* ==============================
+   PROGRESS
+============================== */
+
+.progress-container {
+
+    display: none;
+
+    margin-top: 20px;
+
+    padding: 20px;
+
+    border-radius: 15px;
+
+    background:
+        rgba(255,255,255,.04);
+
+    border:
+        1px solid
+        rgba(255,255,255,.08);
+}
+
+
+.progress-container.show {
+
+    display: block;
+}
+
+
+.progress-top {
+
+    display: flex;
+
+    justify-content:
+        space-between;
+
+    align-items: center;
+
+    margin-bottom: 12px;
+
+    font-size: 14px;
+}
+
+
+.progress-percent {
+
+    color: #25c8ff;
+
+    font-weight: bold;
+
+    font-size: 18px;
+}
+
+
+.progress-bar {
+
+    width: 100%;
+
+    height: 14px;
+
+    background: #080d1a;
+
+    border-radius: 20px;
+
+    overflow: hidden;
+}
+
+
+.progress-fill {
+
+    width: 0%;
+
+    height: 100%;
+
+    background:
+        linear-gradient(
+            90deg,
+            #7c5cff,
+            #25c8ff
+        );
+
+    border-radius: 20px;
+
+    transition: width .3s ease;
+}
+
+
+/* ==============================
+   FEATURES
+============================== */
+
+.features {
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, 1fr);
+
+    gap: 15px;
+
+    margin-top: 60px;
+}
+
+
+.feature {
+
+    padding: 20px;
+
+    border:
+        1px solid
+        rgba(255,255,255,.08);
+
+    border-radius: 15px;
+
+    background:
+        rgba(255,255,255,.03);
+}
+
+
+.feature h3 {
+
+    margin: 10px 0;
+}
+
+
+.feature p {
+
+    color: #8e98ae;
+
+    font-size: 14px;
+
+    line-height: 1.6;
+}
+
+
+/* ==============================
+   MOBILE
+============================== */
+
+@media(max-width:700px) {
+
+    main {
+
+        margin-top: 40px;
+    }
+
+
+    .url-row,
+    .options,
+    .video,
+    .features {
+
+        grid-template-columns: 1fr;
+    }
+
+
+    .video {
+
+        text-align: center;
+    }
+
+
+    .video img {
+
+        max-width: 300px;
+
+        margin: auto;
+    }
+
+
+    .logo {
+
+        font-size: 24px;
+    }
+
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<header>
+
+    <div class="logo">
+
+        <span>▶</span>
+        BEATMATE
+
+    </div>
+
+
+    <div
+        id="status"
+        class="status"
+    >
+
+        Checking server...
+
+    </div>
+
+</header>
+
+
+<main>
+
+
+    <div class="badge">
+
+        FAST • SIMPLE • NO COOKIES
+
+    </div>
+
+
+    <h1>
+
+        Download
+
+        <span class="gradient">
+            YouTube
+        </span>
+
+        Videos & Audio
+
+    </h1>
+
+
+    <p class="subtitle">
+
+        Paste a YouTube URL,
+        choose video or audio,
+        select your quality,
+        and download.
+
+    </p>
+
+
+    <div class="card">
+
+
+        <form id="form">
+
+            <div class="url-row">
+
+                <input
+                    id="url"
+                    type="url"
+                    placeholder="Paste YouTube URL here..."
+                    required
+                >
+
+
+                <button
+                    id="getButton"
+                    type="submit"
+                >
+
+                    Get Video
+
+                </button>
+
+            </div>
+
+
+            <div class="options">
+
+                <select id="type">
+
+                    <option value="video">
+                        Video — MP4
+                    </option>
+
+                    <option value="audio">
+                        Audio — MP3
+                    </option>
+
+                </select>
+
+
+                <select id="quality">
+
+                    <option value="best">
+                        Best Quality
+                    </option>
+
+                    <option value="1080">
+                        1080p
+                    </option>
+
+                    <option value="720">
+                        720p
+                    </option>
+
+                    <option value="480">
+                        480p
+                    </option>
+
+                    <option value="360">
+                        360p
+                    </option>
+
+                </select>
+
+
+                <button
+                    id="downloadButton"
+                    type="button"
+                    disabled
+                >
+
+                    Download
+
+                </button>
+
+            </div>
+
+        </form>
+
+
+        <div
+            id="error"
+            class="error"
+        ></div>
+
+
+        <div
+            id="video"
+            class="video"
+        >
+
+            <img
+                id="thumbnail"
+                alt="Thumbnail"
+            >
+
+
+            <div>
+
+                <h2 id="title"></h2>
+
+                <p id="channel"></p>
+
+            </div>
+
+        </div>
+
+
+        <div
+            id="progressContainer"
+            class="progress-container"
+        >
+
+            <div class="progress-top">
+
+                <span id="progressStatus">
+                    Preparing...
+                </span>
+
+                <span
+                    id="progressPercent"
+                    class="progress-percent"
+                >
+                    0%
+                </span>
+
+            </div>
+
+
+            <div class="progress-bar">
+
+                <div
+                    id="progressBar"
+                    class="progress-fill"
+                ></div>
+
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+    <div class="features">
+
+
+        <div class="feature">
+
+            <h3>
+                ⚡ Fast
+            </h3>
+
+            <p>
+                Powered by Node.js
+                and yt-dlp.
+            </p>
+
+        </div>
+
+
+        <div class="feature">
+
+            <h3>
+                🎵 Audio
+            </h3>
+
+            <p>
+                Download audio
+                as MP3.
+            </p>
+
+        </div>
+
+
+        <div class="feature">
+
+            <h3>
+                🎬 Video
+            </h3>
+
+            <p>
+                Download videos
+                in different qualities.
+            </p>
+
+        </div>
+
+
+    </div>
+
+
+</main>
+
+
+<script>
+
+/* =====================================================
+   API ADDRESS
+===================================================== */
+
+/*
+ * IMPORTANT:
+ *
+ * This makes the website work when:
+ *
+ * 1. Opened with Live Server
+ * 2. Opened from Node.js
+ */
+
+const API_BASE =
+    "http://localhost:3000";
+
+
+/* =====================================================
+   ELEMENTS
+===================================================== */
+
+const form =
+    document.getElementById("form");
+
+const urlInput =
+    document.getElementById("url");
+
+const typeInput =
+    document.getElementById("type");
+
+const qualityInput =
+    document.getElementById("quality");
+
+const getButton =
+    document.getElementById("getButton");
+
+const downloadButton =
+    document.getElementById("downloadButton");
+
+const status =
+    document.getElementById("status");
+
+const errorBox =
+    document.getElementById("error");
+
+const videoBox =
+    document.getElementById("video");
+
+const thumbnail =
+    document.getElementById("thumbnail");
+
+const title =
+    document.getElementById("title");
+
+const channel =
+    document.getElementById("channel");
+
+const progressContainer =
+    document.getElementById(
+        "progressContainer"
+    );
+
+const progressBar =
+    document.getElementById(
+        "progressBar"
+    );
+
+const progressPercent =
+    document.getElementById(
+        "progressPercent"
+    );
+
+const progressStatus =
+    document.getElementById(
+        "progressStatus"
+    );
+
+
+let videoData = null;
+
+let progressTimer = null;
+
+
+/* =====================================================
+   ERROR
+===================================================== */
+
+function showError(message) {
+
+    errorBox.textContent =
+        message;
+
+    errorBox.classList.add(
+        "show"
+    );
+
+}
+
+
+function hideError() {
+
+    errorBox.textContent =
+        "";
+
+    errorBox.classList.remove(
+        "show"
+    );
+
+}
+
+
+/* =====================================================
+   SERVER CHECK
+===================================================== */
+
+async function checkServer() {
+
+    try {
+
+        const response =
+            await fetch(
+                API_BASE +
+                "/api/test",
+                {
+                    cache:
+                        "no-store"
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !response.ok ||
+            !data.success
+        ) {
+
+            throw new Error(
+                "Backend is not responding."
+            );
+
+        }
+
+
+        status.textContent =
+            "● Server Online";
+
+        status.style.color =
+            "#4ade80";
+
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "SERVER ERROR:",
+            error
+        );
+
+
+        status.textContent =
+            "● Server Offline";
+
+        status.style.color =
+            "#ff6b81";
+
+    }
+
+}
+
+
+checkServer();
+
+
+/* =====================================================
+   GET VIDEO INFO
+===================================================== */
+
+form.addEventListener(
+    "submit",
+    async function(event) {
+
+        event.preventDefault();
+
+
+        hideError();
+
+
+        videoBox.classList.remove(
+            "show"
+        );
+
+
+        downloadButton.disabled =
+            true;
+
+
+        videoData = null;
+
+
+        const url =
+            urlInput.value.trim();
+
+
+        if (!url) {
+
+            showError(
+                "Please enter a YouTube URL."
+            );
+
+            return;
+
+        }
+
+
+        getButton.disabled =
+            true;
+
+
+        getButton.textContent =
+            "Getting info...";
+
+
+        try {
+
+            const response =
+                await fetch(
+                    API_BASE +
+                    "/api/info",
+                    {
+
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body:
+                            JSON.stringify({
+                                url: url
+                            })
+
+                    }
+                );
+
+
+            const text =
+                await response.text();
+
+
+            let data;
+
+
+            try {
+
+                data =
+                    JSON.parse(text);
+
+            }
+
+            catch {
+
+                throw new Error(
+                    text ||
+                    "Server returned invalid JSON."
+                );
+
+            }
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "Could not get video."
+                );
+
+            }
+
+
+            videoData =
+                data;
+
+
+            thumbnail.src =
+                data.thumbnail;
+
+
+            title.textContent =
+                data.title;
+
+
+            channel.textContent =
+                data.channel ||
+                "YouTube";
+
+
+            videoBox.classList.add(
+                "show"
+            );
+
+
+            downloadButton.disabled =
+                false;
+
+        }
+
+
+        catch (error) {
+
+            console.error(
+                "INFO ERROR:",
+                error
+            );
+
+
+            showError(
+                error.message
+            );
+
+        }
+
+
+        finally {
+
+            getButton.disabled =
+                false;
+
+            getButton.textContent =
+                "Get Video";
+
+        }
+
+    }
+);
+
+
+/* =====================================================
+   AUDIO MODE
+===================================================== */
+
+typeInput.addEventListener(
+    "change",
+    function() {
+
+        if (
+            typeInput.value ===
+            "audio"
+        ) {
+
+            qualityInput.disabled =
+                true;
+
+        }
+
+        else {
+
+            qualityInput.disabled =
+                false;
+
+        }
+
+    }
+);
+
+
+/* =====================================================
+   DOWNLOAD
+===================================================== */
+
+downloadButton.addEventListener(
+    "click",
+    async function() {
+
+        if (!videoData) {
+
+            showError(
+                "Get the video information first."
+            );
+
+            return;
+
+        }
+
+
+        hideError();
+
+
+        progressContainer.classList.add(
+            "show"
+        );
+
+
+        progressBar.style.width =
+            "0%";
+
+
+        progressPercent.textContent =
+            "0%";
+
+
+        progressStatus.textContent =
+            "Starting download...";
+
+
+        downloadButton.disabled =
+            true;
+
+
+        try {
+
+            /* =========================================
+               START DOWNLOAD
+            ========================================= */
+
+            const response =
+                await fetch(
+                    API_BASE +
+                    "/api/download/start",
+                    {
+
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body:
+                            JSON.stringify({
+
+                                url:
+                                    videoData.url,
+
+                                type:
+                                    typeInput.value,
+
+                                quality:
+                                    qualityInput.value
+
+                            })
+
+                    }
+                );
+
+
+            const text =
+                await response.text();
+
+
+            let data;
+
+
+            try {
+
+                data =
+                    JSON.parse(text);
+
+            }
+
+            catch {
+
+                throw new Error(
+                    text ||
+                    "Server returned invalid JSON."
+                );
+
+            }
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "Could not start download."
+                );
+
+            }
+
+
+            if (!data.success) {
+
+                throw new Error(
+                    data.error ||
+                    "Download failed."
+                );
+
+            }
+
+
+            const jobId =
+                data.jobId;
+
+
+            progressStatus.textContent =
+                "Downloading...";
+
+
+            /* =========================================
+               CHECK PROGRESS
+            ========================================= */
+
+            progressTimer =
+                setInterval(
+                    async function() {
+
+                        try {
+
+                            const statusResponse =
+                                await fetch(
+
+                                    API_BASE +
+                                    "/api/download/status/" +
+                                    encodeURIComponent(
+                                        jobId
+                                    ),
+
+                                    {
+                                        cache:
+                                            "no-store"
+                                    }
+
+                                );
+
+
+                            const statusText =
+                                await statusResponse.text();
+
+
+                            const statusData =
+                                JSON.parse(
+                                    statusText
+                                );
+
+
+                            if (
+                                !statusResponse.ok
+                            ) {
+
+                                throw new Error(
+                                    statusData.error ||
+                                    "Progress error."
+                                );
+
+                            }
+
+
+                            const progress =
+                                Number(
+                                    statusData.progress ||
+                                    0
+                                );
+
+
+                            progressBar.style.width =
+                                progress +
+                                "%";
+
+
+                            progressPercent.textContent =
+                                progress +
+                                "%";
+
+
+                            let message =
+                                statusData.status ||
+                                "Downloading...";
+
+
+                            if (
+                                statusData.speed
+                            ) {
+
+                                message +=
+                                    " • " +
+                                    statusData.speed;
+
+                            }
+
+
+                            progressStatus.textContent =
+                                message;
+
+
+                            /* =================================
+                               COMPLETE
+                            ================================= */
+
+                            if (
+                                statusData.finished
+                            ) {
+
+                                clearInterval(
+                                    progressTimer
+                                );
+
+
+                                progressTimer =
+                                    null;
+
+
+                                if (
+                                    statusData.error
+                                ) {
+
+                                    throw new Error(
+                                        statusData.error
+                                    );
+
+                                }
+
+
+                                progressBar.style.width =
+                                    "100%";
+
+
+                                progressPercent.textContent =
+                                    "100%";
+
+
+                                progressStatus.textContent =
+                                    "Download complete!";
+
+
+                                setTimeout(
+                                    function() {
+
+                                        window.location.href =
+                                            API_BASE +
+                                            "/api/download/file/" +
+                                            encodeURIComponent(
+                                                jobId
+                                            );
+
+                                    },
+                                    500
+                                );
+
+                            }
+
+                        }
+
+
+                        catch (error) {
+
+                            clearInterval(
+                                progressTimer
+                            );
+
+
+                            progressTimer =
+                                null;
+
+
+                            console.error(
+                                error
+                            );
+
+
+                            showError(
+                                error.message
+                            );
+
+
+                            progressStatus.textContent =
+                                "Download failed";
+
+
+                            downloadButton.disabled =
+                                false;
+
+                        }
+
+                    },
+                    500
+                );
+
+        }
+
+
+        catch (error) {
+
+            console.error(
+                "DOWNLOAD ERROR:",
+                error
+            );
+
+
+            showError(
+                error.message
+            );
+
+
+            progressStatus.textContent =
+                "Download failed";
+
+
+            downloadButton.disabled =
+                false;
+
+        }
+
+    }
+);
+
+</script>
+
+
+</body>
+
+</html>
