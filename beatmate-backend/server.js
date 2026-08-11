@@ -51,12 +51,8 @@ const YTDLP = IS_WINDOWS
     : "yt-dlp";
 
 const FFMPEG = IS_WINDOWS
-    ? path.join(
-        ROOT,
-        "bin",
-        "ffmpeg.exe"
-    )
-    : "ffmpeg";
+    ? path.join(ROOT, "bin", "ffmpeg.exe")
+    : path.join(ROOT, "bin", "ffmpeg");
 
 /* =====================================================
    CREATE DOWNLOAD FOLDER
