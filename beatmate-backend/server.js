@@ -2,15 +2,18 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 const { spawn } = require("child_process");
 
 const app = express();
 
 /* =====================================================
-   SERVER PORT
+   SERVER
 ===================================================== */
 
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
+
+const IS_WINDOWS = process.platform === "win32";
 
 /* =====================================================
    PATHS
@@ -18,65 +21,78 @@ const PORT = process.env.PORT || 3000;
 
 const ROOT = __dirname;
 
-const PUBLIC_DIR = path.join(
-    ROOT,
-    "public"
-);
-
-const DOWNLOAD_DIR = path.join(
-    ROOT,
-    "downloads"
-);
-
-/* =====================================================
-   PLATFORM / DOWNLOADER
-===================================================== */
-
-const IS_WINDOWS =
-    process.platform === "win32";
+const PUBLIC_DIR = path.join(ROOT, "public");
 
 /*
-    Windows:
-    - yt-dlp.exe from /bin
-    - ffmpeg.exe from /bin
+ * Render filesystem is ephemeral.
+ *
+ * We use /tmp on Linux/Render for downloaded files.
+ * On Windows we use the local downloads directory.
+ */
+const DOWNLOAD_DIR = IS_WINDOWS
+    ? path.join(ROOT, "downloads")
+    : path.join(os.tmpdir(), "beatmate-downloads");
 
-    Linux / Render:
-    - yt-dlp from PATH
-    - ffmpeg from /bin/ffmpeg
-*/
-
-const YTDLP = IS_WINDOWS
-    ? path.join(
-        ROOT,
-        "bin",
-        "yt-dlp.exe"
-    )
-    : "yt-dlp";
+/*
+ * Render build command creates:
+ *
+ * /bin/ffmpeg
+ *
+ * Windows development:
+ *
+ * /bin/ffmpeg.exe
+ */
 
 const FFMPEG = IS_WINDOWS
-    ? path.join(
-        ROOT,
-        "bin",
-        "ffmpeg.exe"
-    )
-    : path.join(
-        ROOT,
-        "bin",
-        "ffmpeg"
-    );
+    ? path.join(ROOT, "bin", "ffmpeg.exe")
+    : path.join(ROOT, "bin", "ffmpeg");
+
+/*
+ * Windows:
+ *     local yt-dlp.exe
+ *
+ * Render/Linux:
+ *     yt-dlp installed through pip
+ *     and available in PATH.
+ */
+
+const YTDLP = IS_WINDOWS
+    ? path.join(ROOT, "bin", "yt-dlp.exe")
+    : "yt-dlp";
 
 /* =====================================================
-   CREATE DOWNLOAD FOLDER
+   CREATE DOWNLOAD DIRECTORY
 ===================================================== */
 
-if (!fs.existsSync(DOWNLOAD_DIR)) {
-    fs.mkdirSync(
-        DOWNLOAD_DIR,
-        {
-            recursive: true
-        }
+try {
+    fs.mkdirSync(DOWNLOAD_DIR, {
+        recursive: true
+    });
+} catch (error) {
+    console.error(
+        "Could not create download directory:",
+        error.message
     );
 }
+
+/* =====================================================
+   EXPRESS CONFIGURATION
+===================================================== */
+
+app.disable("x-powered-by");
+
+app.use(
+    express.json({
+        limit: "1mb"
+    })
+);
+
+app.use(
+    express.urlencoded({
+        extended: true,
+        limit: "1mb"
+    })
+);
 
 /* =====================================================
    CORS
@@ -84,7 +100,6 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
 
 app.use(
     (req, res, next) => {
-
         res.header(
             "Access-Control-Allow-Origin",
             "*"
@@ -101,27 +116,11 @@ app.use(
         );
 
         if (req.method === "OPTIONS") {
-            return res.sendStatus(200);
+            return res.sendStatus(204);
         }
 
         next();
     }
-);
-
-/* =====================================================
-   EXPRESS
-===================================================== */
-
-app.use(
-    express.json({
-        limit: "1mb"
-    })
-);
-
-app.use(
-    express.urlencoded({
-        extended: true
-    })
 );
 
 /* =====================================================
@@ -130,9 +129,8 @@ app.use(
 
 app.use(
     (req, res, next) => {
-
         console.log(
-            new Date().toLocaleTimeString(),
+            new Date().toISOString(),
             req.method,
             req.url
         );
@@ -145,99 +143,76 @@ app.use(
    FRONTEND
 ===================================================== */
 
-app.use(
-    express.static(
-        PUBLIC_DIR
-    )
-);
+if (fs.existsSync(PUBLIC_DIR)) {
+    app.use(
+        express.static(PUBLIC_DIR)
+    );
+}
 
 /* =====================================================
-   YOUTUBE URL CHECK
+   YOUTUBE URL VALIDATION
 ===================================================== */
 
 function isYouTubeUrl(value) {
-
     try {
-
-        const url =
-            new URL(value);
+        const url = new URL(value);
 
         const host =
-            url.hostname.toLowerCase();
+            url.hostname
+                .toLowerCase()
+                .replace(/^www\./, "");
 
         return (
             host === "youtube.com" ||
-            host === "www.youtube.com" ||
             host === "m.youtube.com" ||
-            host === "youtu.be" ||
-            host === "www.youtu.be"
+            host === "youtu.be"
         );
-
-    }
-
-    catch {
-
+    } catch {
         return false;
-
     }
 }
 
 /* =====================================================
-   CHECK EXECUTABLE
+   EXECUTABLE CHECK
 ===================================================== */
 
 function checkExecutable(command) {
+    return new Promise((resolve) => {
+        let finished = false;
 
-    return new Promise(
-        (resolve) => {
-
-            const child =
-                spawn(
-                    command,
-                    ["--version"],
-                    IS_WINDOWS
-                        ? {
-                            windowsHide: true
-                        }
-                        : {}
-                );
-
-            let finished = false;
-
-            child.on(
-                "error",
-                () => {
-
-                    if (!finished) {
-
-                        finished = true;
-
-                        resolve(false);
-
-                    }
-
+        const child = spawn(
+            command,
+            ["--version"],
+            IS_WINDOWS
+                ? {
+                    windowsHide: true
                 }
-            );
+                : {}
+        );
 
-            child.on(
-                "close",
-                code => {
+        const finish = (result) => {
+            if (finished) {
+                return;
+            }
 
-                    if (!finished) {
+            finished = true;
+            resolve(result);
+        };
 
-                        finished = true;
+        child.on(
+            "error",
+            () => {
+                finish(false);
+            }
+        );
 
-                        resolve(
-                            code === 0
-                        );
-
-                    }
-
-                }
-            );
-
-        }
-    );
+        child.on(
+            "close",
+            (code) => {
+                finish(code === 0);
+            }
+        );
+    });
 }
 
 /* =====================================================
@@ -245,105 +220,248 @@ function checkExecutable(command) {
 ===================================================== */
 
 function runYtDlp(args) {
-
     return new Promise(
         (resolve, reject) => {
+            let stdout = "";
+            let stderr = "";
+            let settled = false;
 
-            /*
-             * On Windows check the local executable.
-             *
-             * On Linux/Render yt-dlp is expected
-             * to be available in PATH.
-             */
+            const child = spawn(
+                YTDLP,
+                args,
+                IS_WINDOWS
+                    ? {
+                        windowsHide: true
+                    }
+                    : {}
+            );
 
-            if (IS_WINDOWS) {
-
-                if (!fs.existsSync(YTDLP)) {
-
-                    reject(
-                        new Error(
-                            "yt-dlp.exe not found in bin folder."
-                        )
-                    );
-
+            const fail = (error) => {
+                if (settled) {
                     return;
-
                 }
 
-            }
+                settled = true;
+                reject(error);
+            };
 
-            const child =
-                spawn(
-                    YTDLP,
-                    args,
-                    IS_WINDOWS
-                        ? {
-                            windowsHide: true
-                        }
-                        : {}
-                );
+            const success = (output) => {
+                if (settled) {
+                    return;
+                }
 
-            let stdout = "";
-
-            let stderr = "";
+                settled = true;
+                resolve(output);
+            };
 
             child.stdout.on(
                 "data",
-                data => {
-
-                    stdout +=
-                        data.toString();
-
+                (data) => {
+                    stdout += data.toString();
                 }
             );
 
             child.stderr.on(
                 "data",
-                data => {
-
-                    stderr +=
-                        data.toString();
-
+                (data) => {
+                    stderr += data.toString();
                 }
             );
 
             child.on(
                 "error",
-                error => {
-
-                    reject(error);
-
+                (error) => {
+                    fail(error);
                 }
             );
 
             child.on(
                 "close",
-                code => {
-
+                (code) => {
                     if (code === 0) {
-
-                        resolve(
-                            stdout
-                        );
-
+                        success(stdout);
+                        return;
                     }
 
-                    else {
-
-                        reject(
-                            new Error(
-                                stderr ||
-                                `yt-dlp exited with code ${code}`
-                            )
+                    const message =
+                        stderr.trim() ||
+                        (
+                            "yt-dlp exited with code " +
+                            code
                         );
 
-                    }
-
+                    fail(
+                        new Error(message)
+                    );
                 }
             );
-
         }
     );
+}
+
+/* =====================================================
+   SAFE JSON RESPONSE
+===================================================== */
+
+function sendError(
+    res,
+    status,
+    message
+) {
+    return res
+        .status(status)
+        .json({
+            success: false,
+            error: message
+        });
+}
+
+/* =====================================================
+   DOWNLOAD JOBS
+===================================================== */
+
+const jobs = new Map();
+
+/* =====================================================
+   JOB CLEANUP
+===================================================== */
+
+const JOB_MAX_AGE =
+    30 * 60 * 1000;
+
+function cleanupJobs() {
+    const now = Date.now();
+
+    for (const [jobId, job] of jobs.entries()) {
+        if (
+            job.finished &&
+            now - job.createdAt > JOB_MAX_AGE
+        ) {
+            jobs.delete(jobId);
+        }
+    }
+}
+
+setInterval(
+    cleanupJobs,
+    5 * 60 * 1000
+);
+
+/* =====================================================
+   UPDATE PROGRESS
+===================================================== */
+
+function updateProgress(
+    jobId,
+    text
+) {
+    const job = jobs.get(jobId);
+
+    if (!job) {
+        return;
+    }
+
+    const clean =
+        String(text || "").trim();
+
+    if (clean) {
+        console.log(
+            "[" + jobId + "]",
+            clean
+        );
+    }
+
+    /*
+     * yt-dlp progress example:
+     *
+     * [download]  52.1% of 10.00MiB at 2.00MiB/s ETA 00:02
+     */
+
+    const percentMatch =
+        text.match(
+            /(\d+(?:\.\d+)?)%/
+        );
+
+    if (percentMatch) {
+        const percent =
+            parseFloat(
+                percentMatch[1]
+            );
+
+        job.progress =
+            Math.min(
+                99,
+                Math.max(
+                    0,
+                    Math.round(percent)
+                )
+            );
+
+        job.status =
+            "Downloading...";
+    }
+
+    /*
+     * Speed
+     */
+
+    const speedMatch =
+        text.match(
+            /\bat\s+([^\s]+\/s|\S+\/s)/i
+        );
+
+    if (speedMatch) {
+        job.speed =
+            speedMatch[1];
+    }
+
+    /*
+     * Merging
+     */
+
+    const lower =
+        text.toLowerCase();
+
+    if (
+        lower.includes("merging formats") ||
+        lower.includes("merging")
+    ) {
+        job.status =
+            "Merging video and audio...";
+    }
+
+    /*
+     * Post-processing
+     */
+
+    if (
+        lower.includes("postprocess")
+    ) {
+        job.status =
+            "Processing...";
+    }
+
+    /*
+     * Extracting audio
+     */
+
+    if (
+        lower.includes("extracting audio")
+    ) {
+        job.status =
+            "Converting to MP3...";
+    }
+
+    /*
+     * Finalizing
+     */
+
+    if (
+        lower.includes("deleting original")
+    ) {
+        job.status =
+            "Finalizing...";
+    }
 }
 
 /* =====================================================
@@ -353,22 +471,13 @@ function runYtDlp(args) {
 app.get(
     "/api/test",
     (req, res) => {
-
-        res.json({
-
+        return res.json({
             success: true,
-
-            message:
-                "BEATMATE API is working",
-
-            platform:
-                process.platform,
-
-            port:
-                PORT
-
+            message: "BEATMATE API is working",
+            platform: process.platform,
+            nodeVersion: process.version,
+            port: PORT
         });
-
     }
 );
 
@@ -379,9 +488,7 @@ app.get(
 app.get(
     "/api/health",
     async (req, res) => {
-
         try {
-
             const ytDlpExists =
                 await checkExecutable(
                     YTDLP
@@ -392,69 +499,128 @@ app.get(
                     FFMPEG
                 );
 
-            let version =
+            let ytDlpVersion =
+                "Unavailable";
+
+            let ffmpegVersion =
                 "Unavailable";
 
             if (ytDlpExists) {
-
                 try {
-
                     const output =
                         await runYtDlp([
                             "--version"
                         ]);
 
-                    version =
+                    ytDlpVersion =
                         output.trim();
-
-                }
-
-                catch {
-
-                    version =
+                } catch {
+                    ytDlpVersion =
                         "Unavailable";
-
                 }
+            }
 
+            if (ffmpegExists) {
+                try {
+                    const output =
+                        await new Promise(
+                            (resolve, reject) => {
+                                let stdout = "";
+                                let stderr = "";
+
+                                const child =
+                                    spawn(
+                                        FFMPEG,
+                                        ["-version"],
+                                        IS_WINDOWS
+                                            ? {
+                                                windowsHide: true
+                                            }
+                                            : {}
+                                    );
+
+                                child.stdout.on(
+                                    "data",
+                                    (data) => {
+                                        stdout +=
+                                            data.toString();
+                                    }
+                                );
+
+                                child.stderr.on(
+                                    "data",
+                                    (data) => {
+                                        stderr +=
+                                            data.toString();
+                                    }
+                                );
+
+                                child.on(
+                                    "error",
+                                    reject
+                                );
+
+                                child.on(
+                                    "close",
+                                    (code) => {
+                                        if (
+                                            code === 0
+                                        ) {
+                                            resolve(
+                                                stdout ||
+                                                stderr
+                                            );
+                                        } else {
+                                            reject(
+                                                new Error(
+                                                    "FFmpeg failed."
+                                                )
+                                            );
+                                        }
+                                    }
+                                );
+                            }
+                        );
+
+                    const match =
+                        output.match(
+                            /ffmpeg version\s+([^\s]+)/i
+                        );
+
+                    if (match) {
+                        ffmpegVersion =
+                            match[1];
+                    }
+                } catch {
+                    ffmpegVersion =
+                        "Unavailable";
+                }
             }
 
             return res.json({
-
                 success: true,
-
                 server: true,
-
-                platform:
-                    process.platform,
-
-                version:
-                    version,
-
-                ytDlp:
-                    ytDlpExists,
-
-                ffmpeg:
-                    ffmpegExists
-
+                platform: process.platform,
+                nodeVersion: process.version,
+                ytDlp: ytDlpExists,
+                ytDlpVersion,
+                ffmpeg: ffmpegExists,
+                ffmpegVersion,
+                downloadDirectory:
+                    DOWNLOAD_DIR
             });
+        } catch (error) {
+            console.error(
+                "HEALTH ERROR:",
+                error.message
+            );
 
+            return sendError(
+                res,
+                500,
+                error.message
+            );
         }
-
-        catch (error) {
-
-            return res
-                .status(500)
-                .json({
-
-                    success: false,
-
-                    error:
-                        error.message
-
-                });
-
-        }
-
     }
 );
 
@@ -465,13 +631,10 @@ app.get(
 app.post(
     "/api/info",
     async (req, res) => {
-
         try {
-
             const url =
                 String(
-                    req.body.url ||
-                    ""
+                    req.body.url || ""
                 ).trim();
 
             console.log(
@@ -479,49 +642,64 @@ app.post(
                 url
             );
 
+            if (!url) {
+                return sendError(
+                    res,
+                    400,
+                    "YouTube URL is required."
+                );
+            }
+
             if (!isYouTubeUrl(url)) {
+                return sendError(
+                    res,
+                    400,
+                    "Please enter a valid YouTube URL."
+                );
+            }
 
-                return res
-                    .status(400)
-                    .json({
+            const ytDlpAvailable =
+                await checkExecutable(
+                    YTDLP
+                );
 
-                        success: false,
-
-                        error:
-                            "Please enter a valid YouTube URL."
-
-                    });
-
+            if (!ytDlpAvailable) {
+                return sendError(
+                    res,
+                    500,
+                    "yt-dlp is not available on the server."
+                );
             }
 
             const output =
                 await runYtDlp([
-
                     "--dump-single-json",
-
                     "--no-playlist",
-
                     "--skip-download",
-
                     "--no-warnings",
-
                     url
-
                 ]);
 
             if (!output.trim()) {
-
                 throw new Error(
                     "yt-dlp returned empty information."
                 );
-
             }
 
-            const info =
-                JSON.parse(output);
+            let info;
+
+            try {
+                info =
+                    JSON.parse(
+                        output
+                    );
+            } catch {
+                throw new Error(
+                    "Could not parse yt-dlp response."
+                );
+            }
 
             return res.json({
-
                 success: true,
 
                 id:
@@ -540,42 +718,28 @@ app.post(
                     info.thumbnail ||
                     "",
 
+                duration:
+                    info.duration ||
+                    0,
+
                 url:
                     info.webpage_url ||
                     url
-
             });
-
-        }
-
-        catch (error) {
-
+        } catch (error) {
             console.error(
                 "INFO ERROR:",
                 error.message
             );
 
-            return res
-                .status(500)
-                .json({
-
-                    success: false,
-
-                    error:
-                        error.message
-
-                });
-
+            return sendError(
+                res,
+                500,
+                error.message
+            );
         }
-
     }
 );
-
-/* =====================================================
-   DOWNLOAD JOBS
-===================================================== */
-
-const jobs = {};
 
 /* =====================================================
    START DOWNLOAD
@@ -584,22 +748,27 @@ const jobs = {};
 app.post(
     "/api/download/start",
     async (req, res) => {
-
         try {
-
             const url =
                 String(
-                    req.body.url ||
-                    ""
+                    req.body.url || ""
                 ).trim();
 
             const type =
-                req.body.type ||
-                "video";
+                String(
+                    req.body.type ||
+                    "video"
+                );
 
             const quality =
-                req.body.quality ||
-                "best";
+                String(
+                    req.body.quality ||
+                    "best"
+                );
+
+            console.log(
+                "================================"
+            );
 
             console.log(
                 "DOWNLOAD REQUEST"
@@ -620,41 +789,39 @@ app.post(
                 quality
             );
 
+            console.log(
+                "================================"
+            );
+
             /* =========================================
                VALIDATION
             ========================================= */
 
+            if (!url) {
+                return sendError(
+                    res,
+                    400,
+                    "YouTube URL is required."
+                );
+            }
+
             if (!isYouTubeUrl(url)) {
-
-                return res
-                    .status(400)
-                    .json({
-
-                        success: false,
-
-                        error:
-                            "Invalid YouTube URL."
-
-                    });
-
+                return sendError(
+                    res,
+                    400,
+                    "Invalid YouTube URL."
+                );
             }
 
             if (
                 type !== "video" &&
                 type !== "audio"
             ) {
-
-                return res
-                    .status(400)
-                    .json({
-
-                        success: false,
-
-                        error:
-                            "Invalid download type."
-
-                    });
-
+                return sendError(
+                    res,
+                    400,
+                    "Invalid download type."
+                );
             }
 
             /* =========================================
@@ -667,18 +834,11 @@ app.post(
                 );
 
             if (!ytDlpAvailable) {
-
-                return res
-                    .status(500)
-                    .json({
-
-                        success: false,
-
-                        error:
-                            "yt-dlp is not installed or cannot be executed."
-
-                    });
-
+                return sendError(
+                    res,
+                    500,
+                    "yt-dlp is not installed or cannot be executed."
+                );
             }
 
             /* =========================================
@@ -691,18 +851,11 @@ app.post(
                 );
 
             if (!ffmpegAvailable) {
-
-                return res
-                    .status(500)
-                    .json({
-
-                        success: false,
-
-                        error:
-                            "FFmpeg is not installed or cannot be executed."
-
-                    });
-
+                return sendError(
+                    res,
+                    500,
+                    "FFmpeg is not installed or cannot be executed."
+                );
             }
 
             /* =========================================
@@ -714,16 +867,17 @@ app.post(
                 "-" +
                 Math.random()
                     .toString(36)
-                    .substring(2, 10);
+                    .slice(2, 10);
 
             /* =========================================
-               OUTPUT
+               OUTPUT FILE
             ========================================= */
 
             const output =
                 path.join(
                     DOWNLOAD_DIR,
-                    `${jobId}-%(title)s.%(ext)s`
+                    jobId +
+                    "-%(title)s.%(ext)s"
                 );
 
             /* =========================================
@@ -733,53 +887,35 @@ app.post(
             let format;
 
             if (type === "audio") {
-
                 format =
                     "bestaudio/best";
-
-            }
-
-            else {
-
+            } else {
                 switch (quality) {
-
                     case "1080":
-
                         format =
                             "bestvideo[height<=1080]+bestaudio/best";
-
                         break;
 
                     case "720":
-
                         format =
                             "bestvideo[height<=720]+bestaudio/best";
-
                         break;
 
                     case "480":
-
                         format =
                             "bestvideo[height<=480]+bestaudio/best";
-
                         break;
 
                     case "360":
-
                         format =
                             "bestvideo[height<=360]+bestaudio/best";
-
                         break;
 
                     default:
-
                         format =
                             "bestvideo*+bestaudio/best";
-
                         break;
-
                 }
-
             }
 
             /* =========================================
@@ -787,12 +923,13 @@ app.post(
             ========================================= */
 
             const args = [
-
                 "--no-playlist",
 
                 "--newline",
 
                 "--progress",
+
+                "--no-warnings",
 
                 "--ffmpeg-location",
                 FFMPEG,
@@ -802,7 +939,6 @@ app.post(
 
                 "-o",
                 output
-
             ];
 
             /* =========================================
@@ -810,38 +946,28 @@ app.post(
             ========================================= */
 
             if (type === "audio") {
-
                 args.push(
-
                     "-x",
-
                     "--audio-format",
                     "mp3",
-
                     "--audio-quality",
                     "192K"
-
                 );
-
             }
 
             /* =========================================
                VIDEO
             ========================================= */
 
-            else {
-
+            if (type === "video") {
                 args.push(
-
                     "--merge-output-format",
                     "mp4"
-
                 );
-
             }
 
             /* =========================================
-               URL LAST
+               URL MUST BE LAST
             ========================================= */
 
             args.push(url);
@@ -850,8 +976,7 @@ app.post(
                CREATE JOB
             ========================================= */
 
-            jobs[jobId] = {
-
+            const job = {
                 progress: 0,
 
                 status:
@@ -863,12 +988,21 @@ app.post(
 
                 file: null,
 
-                error: null
+                error: null,
 
+                createdAt:
+                    Date.now(),
+
+                process: null
             };
 
+            jobs.set(
+                jobId,
+                job
+            );
+
             console.log(
-                "JOB:",
+                "JOB CREATED:",
                 jobId
             );
 
@@ -876,307 +1010,226 @@ app.post(
                START YT-DLP
             ========================================= */
 
-            const child =
-                spawn(
-                    YTDLP,
-                    args,
-                    IS_WINDOWS
-                        ? {
-                            windowsHide: true
-                        }
-                        : {}
+            let child;
+
+            try {
+                child =
+                    spawn(
+                        YTDLP,
+                        args,
+                        IS_WINDOWS
+                            ? {
+                                windowsHide: true
+                            }
+                            : {}
+                    );
+            } catch (error) {
+                jobs.delete(jobId);
+
+                return sendError(
+                    res,
+                    500,
+                    error.message
                 );
+            }
+
+            job.process = child;
+
+            /* =========================================
+               STDOUT
+            ========================================= */
 
             child.stdout.on(
                 "data",
-                data => {
-
+                (data) => {
                     updateProgress(
                         jobId,
                         data.toString()
                     );
-
                 }
             );
+
+            /* =========================================
+               STDERR
+            ========================================= */
 
             child.stderr.on(
                 "data",
-                data => {
-
+                (data) => {
                     updateProgress(
                         jobId,
                         data.toString()
                     );
-
                 }
             );
+
+            /* =========================================
+               PROCESS ERROR
+            ========================================= */
 
             child.on(
                 "error",
-                error => {
-
+                (error) => {
                     console.error(
-                        "PROCESS ERROR:",
+                        "YT-DLP PROCESS ERROR:",
                         error.message
                     );
 
-                    if (jobs[jobId]) {
+                    const current =
+                        jobs.get(jobId);
 
-                        jobs[jobId].error =
-                            error.message;
-
-                        jobs[jobId].status =
-                            "Failed";
-
-                        jobs[jobId].finished =
-                            true;
-
+                    if (!current) {
+                        return;
                     }
 
+                    current.error =
+                        error.message;
+
+                    current.status =
+                        "Failed";
+
+                    current.finished =
+                        true;
+
+                    current.process =
+                        null;
                 }
             );
 
+            /* =========================================
+               PROCESS CLOSED
+            ========================================= */
+
             child.on(
                 "close",
-                code => {
-
+                (code) => {
                     console.log(
                         "YT-DLP EXIT:",
                         code
                     );
 
-                    if (!jobs[jobId]) {
+                    const current =
+                        jobs.get(jobId);
+
+                    if (!current) {
                         return;
                     }
 
+                    current.process =
+                        null;
+
+                    /* =================================
+                       DOWNLOAD FAILED
+                    ================================= */
+
                     if (code !== 0) {
+                        current.error =
+                            "yt-dlp download failed with exit code " +
+                            code;
 
-                        jobs[jobId].error =
-                            "yt-dlp download failed.";
-
-                        jobs[jobId].status =
+                        current.status =
                             "Failed";
 
-                        jobs[jobId].finished =
+                        current.finished =
                             true;
 
                         return;
-
                     }
 
                     /* =================================
-                       FIND FILE
+                       FIND DOWNLOADED FILE
                     ================================= */
 
-                    let files = [];
+                    let files;
 
                     try {
-
                         files =
                             fs.readdirSync(
                                 DOWNLOAD_DIR
                             );
-
-                    }
-
-                    catch (error) {
-
-                        jobs[jobId].error =
+                    } catch (error) {
+                        current.error =
                             error.message;
 
-                        jobs[jobId].status =
+                        current.status =
                             "Failed";
 
-                        jobs[jobId].finished =
+                        current.finished =
                             true;
 
                         return;
-
                     }
 
                     const fileName =
                         files.find(
-                            file =>
+                            (file) =>
                                 file.startsWith(
                                     jobId + "-"
                                 )
                         );
 
-                    if (!fileName) {
+                    /* =================================
+                       FILE NOT FOUND
+                    ================================= */
 
-                        jobs[jobId].error =
+                    if (!fileName) {
+                        current.error =
                             "Downloaded file was not found.";
 
-                        jobs[jobId].status =
+                        current.status =
                             "Failed";
 
-                        jobs[jobId].finished =
+                        current.finished =
                             true;
 
                         return;
-
                     }
 
-                    jobs[jobId].progress =
+                    /* =================================
+                       SUCCESS
+                    ================================= */
+
+                    current.progress =
                         100;
 
-                    jobs[jobId].status =
+                    current.status =
                         "Completed";
 
-                    jobs[jobId].file =
+                    current.file =
                         fileName;
 
-                    jobs[jobId].finished =
+                    current.finished =
                         true;
 
                     console.log(
                         "DOWNLOAD COMPLETE:",
                         fileName
                     );
-
                 }
             );
 
             /* =========================================
-               SEND JOB ID
+               RETURN JOB ID
             ========================================= */
 
             return res.json({
-
                 success: true,
-
-                jobId:
-                    jobId
-
+                jobId
             });
-
-        }
-
-        catch (error) {
-
+        } catch (error) {
             console.error(
-                "DOWNLOAD ERROR:",
+                "DOWNLOAD START ERROR:",
                 error.message
             );
 
-            return res
-                .status(500)
-                .json({
-
-                    success: false,
-
-                    error:
-                        error.message
-
-                });
-
+            return sendError(
+                res,
+                500,
+                error.message
+            );
         }
-
     }
 );
-
-/* =====================================================
-   UPDATE PROGRESS
-===================================================== */
-
-function updateProgress(
-    jobId,
-    text
-) {
-
-    const job =
-        jobs[jobId];
-
-    if (!job) {
-        return;
-    }
-
-    const clean =
-        text.trim();
-
-    if (clean) {
-
-        console.log(
-            jobId,
-            clean
-        );
-
-    }
-
-    /* =========================================
-       PERCENTAGE
-    ========================================= */
-
-    const percentMatch =
-        text.match(
-            /(\d+(?:\.\d+)?)%/
-        );
-
-    if (percentMatch) {
-
-        const percent =
-            parseFloat(
-                percentMatch[1]
-            );
-
-        job.progress =
-            Math.min(
-                99,
-                Math.max(
-                    0,
-                    Math.round(percent)
-                )
-            );
-
-        job.status =
-            "Downloading...";
-
-    }
-
-    /* =========================================
-       SPEED
-    ========================================= */
-
-    const speedMatch =
-        text.match(
-            /\bat\s+([^\s]+)/i
-        );
-
-    if (speedMatch) {
-
-        job.speed =
-            speedMatch[1];
-
-    }
-
-    /* =========================================
-       MERGING
-    ========================================= */
-
-    if (
-        text.toLowerCase()
-            .includes("merging")
-    ) {
-
-        job.status =
-            "Merging video and audio...";
-
-    }
-
-    /* =========================================
-       FINALIZING
-    ========================================= */
-
-    if (
-        text.toLowerCase()
-            .includes("deleting original")
-    ) {
-
-        job.status =
-            "Finalizing...";
-
-    }
-}
 
 /* =====================================================
    DOWNLOAD STATUS
@@ -1185,29 +1238,21 @@ function updateProgress(
 app.get(
     "/api/download/status/:jobId",
     (req, res) => {
+        const jobId =
+            req.params.jobId;
 
         const job =
-            jobs[
-                req.params.jobId
-            ];
+            jobs.get(jobId);
 
         if (!job) {
-
-            return res
-                .status(404)
-                .json({
-
-                    success: false,
-
-                    error:
-                        "Download job not found."
-
-                });
-
+            return sendError(
+                res,
+                404,
+                "Download job not found."
+            );
         }
 
         return res.json({
-
             success: true,
 
             progress:
@@ -1224,63 +1269,53 @@ app.get(
 
             error:
                 job.error
-
         });
-
     }
 );
 
 /* =====================================================
-   SEND FILE
+   SEND DOWNLOADED FILE
 ===================================================== */
 
 app.get(
     "/api/download/file/:jobId",
     (req, res) => {
+        const jobId =
+            req.params.jobId;
 
         const job =
-            jobs[
-                req.params.jobId
-            ];
+            jobs.get(jobId);
 
         if (!job) {
-
             return res
                 .status(404)
                 .send(
                     "Download job not found."
                 );
-
         }
 
         if (!job.finished) {
-
             return res
                 .status(400)
                 .send(
                     "Download is not finished."
                 );
-
         }
 
         if (job.error) {
-
             return res
                 .status(500)
                 .send(
                     job.error
                 );
-
         }
 
         if (!job.file) {
-
             return res
                 .status(404)
                 .send(
                     "Downloaded file not found."
                 );
-
         }
 
         const filePath =
@@ -1289,51 +1324,150 @@ app.get(
                 job.file
             );
 
-        if (!fs.existsSync(filePath)) {
+        /* =========================================
+           SECURITY CHECK
+        ========================================= */
 
+        const resolvedPath =
+            path.resolve(
+                filePath
+            );
+
+        const resolvedDir =
+            path.resolve(
+                DOWNLOAD_DIR
+            );
+
+        if (
+            !resolvedPath.startsWith(
+                resolvedDir + path.sep
+            )
+        ) {
+            return res
+                .status(403)
+                .send(
+                    "Invalid file path."
+                );
+        }
+
+        /* =========================================
+           FILE EXISTS
+        ========================================= */
+
+        if (!fs.existsSync(filePath)) {
             return res
                 .status(404)
                 .send(
                     "File no longer exists."
                 );
-
         }
 
         console.log(
-            "SENDING:",
+            "SENDING FILE:",
             job.file
         );
 
         res.download(
             filePath,
             job.file,
-            error => {
-
+            (error) => {
                 if (error) {
-
                     console.error(
                         "SEND ERROR:",
                         error.message
                     );
-
                 }
 
-                /* Delete downloaded file */
+                /* =================================
+                   DELETE FILE
+                ================================= */
 
                 fs.unlink(
                     filePath,
-                    () => {}
+                    (unlinkError) => {
+                        if (
+                            unlinkError &&
+                            unlinkError.code !==
+                                "ENOENT"
+                        ) {
+                            console.error(
+                                "FILE DELETE ERROR:",
+                                unlinkError.message
+                            );
+                        }
+                    }
                 );
 
-                /* Delete job */
+                /* =================================
+                   DELETE JOB
+                ================================= */
 
-                delete jobs[
-                    req.params.jobId
-                ];
-
+                jobs.delete(
+                    jobId
+                );
             }
         );
+    }
+);
 
+/* =====================================================
+   CANCEL DOWNLOAD
+===================================================== */
+
+app.post(
+    "/api/download/cancel/:jobId",
+    (req, res) => {
+        const jobId =
+            req.params.jobId;
+
+        const job =
+            jobs.get(jobId);
+
+        if (!job) {
+            return sendError(
+                res,
+                404,
+                "Download job not found."
+            );
+        }
+
+        if (
+            job.finished
+        ) {
+            return res.json({
+                success: true,
+                message:
+                    "Download already finished."
+            });
+        }
+
+        if (job.process) {
+            try {
+                job.process.kill(
+                    "SIGTERM"
+                );
+            } catch {
+                /* Ignore */
+            }
+        }
+
+        job.status =
+            "Cancelled";
+
+        job.error =
+            "Download cancelled.";
+
+        job.finished =
+            true;
+
+        job.process =
+            null;
+
+        return res.json({
+            success: true,
+            message:
+                "Download cancelled."
+        });
     }
 );
 
@@ -1344,35 +1478,36 @@ app.get(
 app.get(
     "/",
     (req, res) => {
-
         const indexPath =
             path.join(
                 PUBLIC_DIR,
                 "index.html"
             );
 
-        if (!fs.existsSync(indexPath)) {
-
+        if (
+            !fs.existsSync(
+                indexPath
+            )
+        ) {
             return res
                 .status(404)
                 .send(
                     "index.html not found inside public folder."
                 );
-
         }
 
-        res.sendFile(indexPath);
-
+        return res.sendFile(
+            indexPath
+        );
     }
 );
 
 /* =====================================================
-   UNKNOWN API
+   UNKNOWN API / ROUTES
 ===================================================== */
 
 app.use(
     (req, res) => {
-
         console.log(
             "UNKNOWN REQUEST:",
             req.method,
@@ -1380,25 +1515,21 @@ app.use(
         );
 
         if (
-            req.url.startsWith("/api/")
+            req.url.startsWith(
+                "/api/"
+            )
         ) {
-
             return res
                 .status(404)
                 .json({
-
                     success: false,
-
                     error:
                         "API endpoint not found.",
-
                     requested:
                         req.method +
                         " " +
                         req.url
-
                 });
-
         }
 
         return res
@@ -1406,7 +1537,41 @@ app.use(
             .send(
                 "BEATMATE page not found."
             );
+    }
+);
 
+/* =====================================================
+   GLOBAL ERROR HANDLER
+===================================================== */
+
+app.use(
+    (
+        error,
+        req,
+        res,
+        next
+    ) => {
+        console.error(
+            "GLOBAL ERROR:",
+            error
+        );
+
+        if (
+            res.headersSent
+        ) {
+            return next(
+                error
+            );
+        }
+
+        return res
+            .status(500)
+            .json({
+                success: false,
+                error:
+                    error.message ||
+                    "Internal server error."
+            });
     }
 );
 
@@ -1418,21 +1583,16 @@ app.listen(
     PORT,
     "0.0.0.0",
     () => {
-
         console.log("");
-
         console.log(
             "======================================"
         );
-
         console.log(
             "          BEATMATE SERVER"
         );
-
         console.log(
             "======================================"
         );
-
         console.log("");
 
         console.log(
@@ -1441,38 +1601,31 @@ app.listen(
         );
 
         console.log(
+            "Node:",
+            process.version
+        );
+
+        console.log(
             "Port:",
             PORT
         );
 
-        console.log("");
-
         console.log(
-            "Website:"
-        );
-
-        console.log(
-            `http://localhost:${PORT}`
+            "Environment:",
+            process.env.NODE_ENV ||
+                "production"
         );
 
         console.log("");
 
         console.log(
-            "Test API:"
+            "Public:",
+            PUBLIC_DIR
         );
 
         console.log(
-            `http://localhost:${PORT}/api/test`
-        );
-
-        console.log("");
-
-        console.log(
-            "Health API:"
-        );
-
-        console.log(
-            `http://localhost:${PORT}/api/health`
+            "Downloads:",
+            DOWNLOAD_DIR
         );
 
         console.log("");
@@ -1486,13 +1639,35 @@ app.listen(
 
         console.log(
             "FFmpeg:",
-            IS_WINDOWS
-                ? FFMPEG
-                : "PATH: ffmpeg"
+            FFMPEG
         );
 
         console.log("");
 
+        console.log(
+            "Test API:"
+        );
+
+        console.log(
+            "/api/test"
+        );
+
+        console.log("");
+
+        console.log(
+            "Health API:"
+        );
+
+        console.log(
+            "/api/health"
+        );
+
+        console.log("");
+
+        console.log(
+            "======================================"
+        );
+        console.log("");
     }
 );
 ```
